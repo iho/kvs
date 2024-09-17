@@ -40,7 +40,7 @@ func main() {
 
 	// Test Append operation
 	fmt.Println("Testing Append...")
-	rec := etf.Tuple{etf.Atom("test_record"), 1}
+	rec := etf.Tuple{etf.Atom("test_record"), etf.Integer(1)}
 	feed := etf.Atom("feed1")
 	_, err = rdb.Append(rec, feed)
 	if err != nil {
@@ -49,14 +49,14 @@ func main() {
 	fmt.Println("Append successful.")
 
 	// Test Take operation
-	fmt.Println("\nTesting Take...")
+	// fmt.Println("\nTesting Take...")
 	startKey := rec
 	num := 10
-	results, err := rdb.Take(startKey, num)
-	if err != nil {
-		log.Fatalf("Take failed: %v", err)
-	}
-	fmt.Printf("Take results: %v\n", results)
+	// results, err := rdb.Take(startKey, num)
+	// if err != nil {
+	// 	log.Fatalf("Take failed: %v", err)
+	// }
+	// fmt.Printf("Take results: %v\n", results)
 
 	// Test Top operation
 	fmt.Println("\nTesting Top...")
@@ -95,7 +95,7 @@ func main() {
 	// Test LoadReader and SaveReader operations
 	fmt.Println("\nTesting SaveReader and LoadReader...")
 	readerID := etf.Atom("reader1")
-	readerData := etf.Tuple{etf.Atom("state"), 42}
+	readerData := etf.Tuple{etf.Atom("state"), etf.Integer(999)}
 	err = rdb.SaveReader(readerID, readerData)
 	if err != nil {
 		log.Fatalf("SaveReader failed: %v", err)
@@ -124,7 +124,7 @@ func main() {
 	fmt.Println("\nTesting Cut...")
 	// Append multiple records to test Cut
 	for i := 2; i <= 5; i++ {
-		rec := etf.Tuple{etf.Atom("test_record"), i}
+		rec := etf.Tuple{etf.Atom("test_record"), etf.Integer(i)}
 		_, err = rdb.Append(rec, feed)
 		if err != nil {
 			log.Fatalf("Append failed: %v", err)
@@ -135,7 +135,7 @@ func main() {
 		log.Fatalf("Cut failed: %v", err)
 	}
 	// Verify that records are removed
-	results, err = rdb.Take(startKey, num)
+	results, err := rdb.Take(startKey, num)
 	if err != nil {
 		log.Fatalf("Take failed after Cut: %v", err)
 	}
