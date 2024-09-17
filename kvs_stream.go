@@ -3,6 +3,7 @@ package kvs
 import (
 	"bytes"
 	"errors"
+	"fmt"
 
 	"github.com/iho/etf"
 	"github.com/linxGnu/grocksdb"
@@ -29,13 +30,10 @@ func NewRocksDB(db *grocksdb.DB, ro *grocksdb.ReadOptions, wo *grocksdb.WriteOpt
 
 // Cut removes all the data associated with a specific feed or key range.
 func (r *RocksDB) Cut(feed etf.ErlTerm) error {
-	start, err := etf.EncodeErlTerm(feed, true)
-	if err != nil {
-		return err
-	}
-
-	// To define an end key, we can append a byte that is greater than any possible byte in the start key
-	end := append(start, 0xFF)
+	// start, err := etf.EncodeErlTerm(feed, true)
+	// if err != nil {
+	// 	return err
+	// }
 
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
@@ -43,12 +41,13 @@ func (r *RocksDB) Cut(feed etf.ErlTerm) error {
 	batch := grocksdb.NewWriteBatch()
 	defer batch.Destroy()
 
-	for iter.Seek(start); iter.Valid(); iter.Next() {
+	for iter.Seek([]byte{}); iter.Valid(); iter.Next() {
 		key := iter.Key()
-		if bytes.Compare(key.Data(), end) >= 0 {
-			key.Free()
-			break
-		}
+		fmt.Println("key", string(key.Data()))
+		// if bytes.Compare(key.Data(), start) >= 0 {
+		// 	key.Free()
+		// 	break
+		// }
 		batch.Delete(key.Data())
 		key.Free()
 	}

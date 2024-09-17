@@ -46,6 +46,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Append failed: %v", err)
 	}
+	rec2 := etf.Tuple{etf.Atom("test_record"), etf.Integer(2)}
+	_, err = rdb.Append(rec2, feed)
+	if err != nil {
+		log.Fatalf("Append failed: %v", err)
+	}
+	rec3 := etf.Tuple{etf.Atom("test_record"), etf.Integer(3)}
+	_, err = rdb.Append(rec3, feed)
+	if err != nil {
+		log.Fatalf("Append failed: %v", err)
+	}
 	fmt.Println("Append successful.")
 
 	// Test Take operation
@@ -76,7 +86,7 @@ func main() {
 
 	// Test Next operation
 	fmt.Println("\nTesting Next...")
-	nextKey, nextValue, err := rdb.Next(startKey)
+	nextKey, nextValue, err := rdb.Next(rec2)
 	if err != nil {
 		fmt.Printf("Next returned error: %v\n", err)
 	} else {
@@ -85,7 +95,7 @@ func main() {
 
 	// Test Prev operation
 	fmt.Println("\nTesting Prev...")
-	prevKey, prevValue, err := rdb.Prev(startKey)
+	prevKey, prevValue, err := rdb.Prev(rec2)
 	if err != nil {
 		fmt.Printf("Prev returned error: %v\n", err)
 	} else {
@@ -114,23 +124,30 @@ func main() {
 	}
 	// Verify removal
 	_, err = rdb.LoadReader(rec)
-	if err != nil {
-		fmt.Printf("Record successfully removed: %v\n", err)
+	if err == nil {
+		fmt.Printf("Record still exists after removal: %v\n", err)
 	} else {
-		fmt.Println("Record still exists after removal.")
+		fmt.Println("Record successfully removed.")
 	}
 
 	// Test Cut operation
 	fmt.Println("\nTesting Cut...")
 	// Append multiple records to test Cut
-	for i := 2; i <= 5; i++ {
-		rec := etf.Tuple{etf.Atom("test_record"), etf.Integer(i)}
+	for i := 0; i <= 5; i++ {
+		rec := etf.Tuple{etf.Atom("test_record" + fmt.Sprint(i))}
 		_, err = rdb.Append(rec, feed)
 		if err != nil {
 			log.Fatalf("Append failed: %v", err)
 		}
 	}
-	err = rdb.Cut(feed)
+
+	results, err = rdb.Take(startKey, num)
+	if err != nil {
+		log.Fatalf("Take failed after Cut: %v", err)
+	}
+	fmt.Printf("Records BEFORE Cut: %v\n", results)
+
+	err = rdb.Cut(etf.Atom("feed1"))
 	if err != nil {
 		log.Fatalf("Cut failed: %v", err)
 	}
