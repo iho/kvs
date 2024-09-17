@@ -49,14 +49,14 @@ func main() {
 	fmt.Println("Append successful.")
 
 	// Test Take operation
-	// fmt.Println("\nTesting Take...")
+	fmt.Println("\nTesting Take...")
 	startKey := rec
 	num := 10
-	// results, err := rdb.Take(startKey, num)
-	// if err != nil {
-	// 	log.Fatalf("Take failed: %v", err)
-	// }
-	// fmt.Printf("Take results: %v\n", results)
+	results, err := rdb.Take(startKey, num)
+	if err != nil {
+		log.Fatalf("Take failed: %v", err)
+	}
+	fmt.Printf("Take results: %v\n", results)
 
 	// Test Top operation
 	fmt.Println("\nTesting Top...")
@@ -135,14 +135,13 @@ func main() {
 		log.Fatalf("Cut failed: %v", err)
 	}
 	// Verify that records are removed
-	results, err := rdb.Take(startKey, num)
+	results, err = rdb.Take(startKey, num)
 	if err != nil {
 		log.Fatalf("Take failed after Cut: %v", err)
 	}
 	fmt.Printf("Records after Cut: %v\n", results)
 
 	// Clean up database
-	db.Close()
 	err = os.RemoveAll(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to clean up db: %v", err)

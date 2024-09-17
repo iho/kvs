@@ -61,11 +61,11 @@ func (r *RocksDB) Cut(feed etf.ErlTerm) error {
 }
 
 // Take retrieves a specific number of key-value pairs starting from a given key.
-func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[etf.ErlTerm]etf.ErlTerm, error) {
+func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (etf.Map, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
 
-	result := make(map[etf.ErlTerm]etf.ErlTerm)
+	result := etf.Map{}
 	start, err := etf.EncodeErlTerm(startKey, true)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[etf.ErlTerm]etf.ErlTe
 			return nil, err
 		}
 
-		result[k] = v
+		result = append(result, etf.MapElem{Key: k, Value: v})
 
 		key.Free()
 		value.Free()
@@ -363,4 +363,9 @@ func (r *RocksDB) Append(rec etf.ErlTerm, feed etf.ErlTerm) (etf.ErlTerm, error)
 	}
 
 	return rec, nil
+}
+
+// Close closes the database
+func (r *RocksDB) Close() {
+	r.db.Close()
 }
