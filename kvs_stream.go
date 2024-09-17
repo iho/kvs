@@ -19,27 +19,6 @@ type RocksDB struct {
 	wo *grocksdb.WriteOptions
 }
 
-// joinrToBytes concatenates multiple byte slices into a single byte slice
-func joinToBytes(parts ...[]byte) []byte {
-	// Calculate total length to pre-allocate the result slice
-	totalLen := 0
-	for _, part := range parts {
-		totalLen += len(part)
-	}
-
-	// Allocate a single slice for the result
-	result := make([]byte, totalLen)
-
-	// Copy each part into the result slice
-	currentPos := 0
-	for _, part := range parts {
-		copy(result[currentPos:], part)
-		currentPos += len(part)
-	}
-
-	return result
-}
-
 // cut removes all the data associated with a specific feed or key range.
 // It's just a placeholder, as RocksDB doesn’t natively support this, but can be implemented.
 func (r *RocksDB) Cut(feed etf.ErlTerm) error {
