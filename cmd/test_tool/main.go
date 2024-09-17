@@ -134,29 +134,29 @@ func main() {
 	fmt.Println("\nTesting Cut...")
 	// Append multiple records to test Cut
 	for i := 0; i <= 5; i++ {
-		rec := etf.Tuple{etf.Atom("test_record" + fmt.Sprint(i))}
+		rec := etf.Atom("test_record" + fmt.Sprint(i))
 		_, err = rdb.Append(rec, feed)
 		if err != nil {
 			log.Fatalf("Append failed: %v", err)
 		}
 	}
 
-	results, err = rdb.Take(startKey, num)
+	resultsBefore, err := rdb.Take(startKey, num)
 	if err != nil {
 		log.Fatalf("Take failed after Cut: %v", err)
 	}
-	fmt.Printf("Records BEFORE Cut: %v\n", results)
+	fmt.Printf("Records BEFORE Cut: %v\n", resultsBefore)
 
-	err = rdb.Cut(etf.Atom("feed1"))
+	err = rdb.Cut(etf.Atom("test_record"))
 	if err != nil {
 		log.Fatalf("Cut failed: %v", err)
 	}
 	// Verify that records are removed
-	results, err = rdb.Take(startKey, num)
+	resultsAfter, err := rdb.Take(startKey, 10000)
 	if err != nil {
 		log.Fatalf("Take failed after Cut: %v", err)
 	}
-	fmt.Printf("Records after Cut: %v\n", results)
+	fmt.Printf("Records after Cut: %v\n", resultsAfter)
 
 	// Clean up database
 	err = os.RemoveAll(dbPath)

@@ -3,7 +3,7 @@ package kvs
 import (
 	"bytes"
 	"errors"
-	"fmt"
+	"strings"
 
 	"github.com/iho/etf"
 	"github.com/linxGnu/grocksdb"
@@ -30,10 +30,10 @@ func NewRocksDB(db *grocksdb.DB, ro *grocksdb.ReadOptions, wo *grocksdb.WriteOpt
 
 // Cut removes all the data associated with a specific feed or key range.
 func (r *RocksDB) Cut(feed etf.ErlTerm) error {
-	// start, err := etf.EncodeErlTerm(feed, true)
-	// if err != nil {
-	// 	return err
-	// }
+	start, err := etf.EncodeErlTerm(feed, true)
+	if err != nil {
+		return err
+	}
 
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
@@ -41,15 +41,20 @@ func (r *RocksDB) Cut(feed etf.ErlTerm) error {
 	batch := grocksdb.NewWriteBatch()
 	defer batch.Destroy()
 
-	for iter.Seek([]byte{}); iter.Valid(); iter.Next() {
+	for iter.Seek(start[:len(start)-1]); iter.Valid(); iter.Next() {
 		key := iter.Key()
-		fmt.Println("key", string(key.Data()))
-		// if bytes.Compare(key.Data(), start) >= 0 {
-		// 	key.Free()
-		// 	break
-		// }
-		batch.Delete(key.Data())
-		key.Free()
+		defer key.Free()
+		k, err := etf.DecodeErlTerm(key.Data())
+		if err != nil {
+			return err
+		}
+		at, ok := k.(etf.Atom)
+		if ok && strings.HasPrefix(string(at), string(feed.(etf.Atom))) {
+			batch.Delete(key.Data())
+			key.Free()
+		} else {
+			break
+		}
 	}
 
 	if err := iter.Err(); err != nil {
