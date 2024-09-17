@@ -3,6 +3,7 @@ package kvs
 import (
 	"bytes"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/iho/etf"
@@ -367,6 +368,62 @@ func (r *RocksDB) Append(rec etf.ErlTerm, feed etf.ErlTerm) (etf.ErlTerm, error)
 	}
 
 	return rec, nil
+}
+
+func (r *RocksDB) All(rec etf.ErlTerm) ([]etf.ErlTerm, error) {
+	recb, err := etf.EncodeErlTerm(rec, true)
+	if err != nil {
+		return nil, err
+	}
+
+	iter := r.db.NewIterator(r.ro)
+	defer iter.Close()
+
+	result := []etf.ErlTerm{}
+
+	iter.Seek(recb)
+	for ; iter.Valid(); iter.Next() {
+		key := iter.Key()
+		value := iter.Value()
+
+		_, err := etf.DecodeErlTerm(key.Data())
+		if err != nil {
+			key.Free()
+			value.Free()
+			return nil, err
+		}
+
+		v, err := etf.DecodeErlTerm(value.Data())
+		if err != nil {
+			key.Free()
+			value.Free()
+			return nil, err
+		}
+
+		result = append(result, v)
+
+		key.Free()
+		value.Free()
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (r *RocksDB) Count() (int64, error) {
+	r.db.NewIterator(r.ro).Close()
+	n := r.db.GetProperty("rocksdb.estimate-num-keys")
+	if n == "" {
+		return 0, UnknownError
+	}
+	nn, err := strconv.Atoi(n)
+	if err != nil {
+		return 0, err
+	}
+	return int64(nn), nil
 }
 
 // Close closes the database
