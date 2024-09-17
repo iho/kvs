@@ -19,27 +19,34 @@ type RocksDB struct {
 	wo *grocksdb.WriteOptions
 }
 
-// cut removes all the data associated with a specific feed or key range.
-// It's just a placeholder, as RocksDB doesn’t natively support this, but can be implemented.
+func NewRocksDB(db *grocksdb.DB, ro *grocksdb.ReadOptions, wo *grocksdb.WriteOptions) *RocksDB {
+	return &RocksDB{
+		db: db,
+		ro: ro,
+		wo: wo,
+	}
+}
+
+// Cut removes all the data associated with a specific feed or key range.
 func (r *RocksDB) Cut(feed etf.ErlTerm) error {
-	// Implementation to delete a specific range from RocksDB
-	iter := r.db.NewIterator(r.ro)
-	defer iter.Close()
 	start, err := etf.EncodeErlTerm(feed, true)
 	if err != nil {
 		return err
 	}
 
-	end, err := etf.EncodeErlTerm(feed, true)
-	if err != nil {
-		return err
-	}
+	// To define an end key, we can append a byte that is greater than any possible byte in the start key
+	end := append(start, 0xFF)
+
+	iter := r.db.NewIterator(r.ro)
+	defer iter.Close()
+
 	batch := grocksdb.NewWriteBatch()
 	defer batch.Destroy()
 
 	for iter.Seek(start); iter.Valid(); iter.Next() {
 		key := iter.Key()
 		if bytes.Compare(key.Data(), end) >= 0 {
+			key.Free()
 			break
 		}
 		batch.Delete(key.Data())
@@ -53,16 +60,17 @@ func (r *RocksDB) Cut(feed etf.ErlTerm) error {
 	return r.db.Write(r.wo, batch)
 }
 
-// take retrieves a specific number of key-value pairs starting from a given key.
-func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[string]string, error) {
+// Take retrieves a specific number of key-value pairs starting from a given key.
+func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[etf.ErlTerm]etf.ErlTerm, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
 
-	result := make(map[string]string)
+	result := make(map[etf.ErlTerm]etf.ErlTerm)
 	start, err := etf.EncodeErlTerm(startKey, true)
 	if err != nil {
 		return nil, err
 	}
+
 	iter.Seek(start)
 	count := 0
 
@@ -70,7 +78,21 @@ func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[string]string, error)
 		key := iter.Key()
 		value := iter.Value()
 
-		result[string(key.Data())] = string(value.Data())
+		k, err := etf.DecodeErlTerm(key.Data())
+		if err != nil {
+			key.Free()
+			value.Free()
+			return nil, err
+		}
+
+		v, err := etf.DecodeErlTerm(value.Data())
+		if err != nil {
+			key.Free()
+			value.Free()
+			return nil, err
+		}
+
+		result[k] = v
 
 		key.Free()
 		value.Free()
@@ -85,20 +107,25 @@ func (r *RocksDB) Take(startKey etf.ErlTerm, num int) (map[string]string, error)
 	return result, nil
 }
 
-// drop removes a specific number of key-value pairs starting from a given key.
+// Drop removes a specific number of key-value pairs starting from a given key.
 func (r *RocksDB) Drop(startKey etf.ErlTerm, num int) error {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
+
 	start, err := etf.EncodeErlTerm(startKey, true)
 	if err != nil {
 		return err
 	}
+
+	batch := grocksdb.NewWriteBatch()
+	defer batch.Destroy()
+
 	iter.Seek(start)
 	count := 0
 
 	for ; iter.Valid() && count < num; iter.Next() {
 		key := iter.Key()
-		r.db.Delete(r.wo, key.Data()) // Delete the key
+		batch.Delete(key.Data())
 		key.Free()
 		count++
 	}
@@ -107,10 +134,10 @@ func (r *RocksDB) Drop(startKey etf.ErlTerm, num int) error {
 		return err
 	}
 
-	return nil
+	return r.db.Write(r.wo, batch)
 }
 
-// top retrieves the first key-value pair in the database
+// Top retrieves the first key-value pair in the database
 func (r *RocksDB) Top() (etf.ErlTerm, etf.ErlTerm, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
@@ -138,10 +165,10 @@ func (r *RocksDB) Top() (etf.ErlTerm, etf.ErlTerm, error) {
 		return nil, nil, err
 	}
 
-	return nil, nil, UnknownError
+	return nil, nil, errors.New("database is empty")
 }
 
-// bot retrieves the last key-value pair in the database
+// Bot retrieves the last key-value pair in the database
 func (r *RocksDB) Bot() (etf.ErlTerm, etf.ErlTerm, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
@@ -153,6 +180,7 @@ func (r *RocksDB) Bot() (etf.ErlTerm, etf.ErlTerm, error) {
 
 		defer key.Free()
 		defer value.Free()
+
 		k, err := etf.DecodeErlTerm(key.Data())
 		if err != nil {
 			return nil, nil, err
@@ -168,85 +196,124 @@ func (r *RocksDB) Bot() (etf.ErlTerm, etf.ErlTerm, error) {
 		return nil, nil, err
 	}
 
-	return nil, nil, UnknownError
+	return nil, nil, errors.New("database is empty")
 }
 
-// next retrieves the next key-value pair after the provided startKey
-func (r *RocksDB) Next(startKey []byte) (string, string, error) {
+// Next retrieves the next key-value pair after the provided startKey
+func (r *RocksDB) Next(startKey etf.ErlTerm) (etf.ErlTerm, etf.ErlTerm, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
 
-	iter.Seek(startKey)
+	start, err := etf.EncodeErlTerm(startKey, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	iter.Seek(start)
 	if iter.Valid() {
-		iter.Next()
-		if iter.Valid() {
-			key := iter.Key()
-			value := iter.Value()
-
-			defer key.Free()
-			defer value.Free()
-
-			return string(key.Data()), string(value.Data()), nil
+		// If the startKey exists, move to the next key
+		key := iter.Key()
+		if bytes.Equal(key.Data(), start) {
+			iter.Next()
+			key.Free()
+		} else {
+			key.Free()
 		}
 	}
 
-	if err := iter.Err(); err != nil {
-		return "", "", err
+	if iter.Valid() {
+		key := iter.Key()
+		value := iter.Value()
+
+		defer key.Free()
+		defer value.Free()
+
+		k, err := etf.DecodeErlTerm(key.Data())
+		if err != nil {
+			return nil, nil, err
+		}
+		v, err := etf.DecodeErlTerm(value.Data())
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return k, v, nil
 	}
 
-	return "", "", UnknownError
+	if err := iter.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	return nil, nil, errors.New("no next key")
 }
 
-// prev retrieves the previous key-value pair before the provided startKey
-func (r *RocksDB) Prev(startKey []byte) (string, string, error) {
+// Prev retrieves the previous key-value pair before the provided startKey
+func (r *RocksDB) Prev(startKey etf.ErlTerm) (etf.ErlTerm, etf.ErlTerm, error) {
 	iter := r.db.NewIterator(r.ro)
 	defer iter.Close()
 
-	iter.Seek(startKey)
+	start, err := etf.EncodeErlTerm(startKey, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	iter.Seek(start)
 	if iter.Valid() {
 		iter.Prev()
-		if iter.Valid() {
-			key := iter.Key()
-			value := iter.Value()
+	} else {
+		// If Seek failed, position at the last key less than startKey
+		iter.SeekForPrev(start)
+	}
 
-			defer key.Free()
-			defer value.Free()
+	if iter.Valid() {
+		key := iter.Key()
+		value := iter.Value()
 
-			return string(key.Data()), string(value.Data()), nil
+		defer key.Free()
+		defer value.Free()
+
+		k, err := etf.DecodeErlTerm(key.Data())
+		if err != nil {
+			return nil, nil, err
 		}
+		v, err := etf.DecodeErlTerm(value.Data())
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return k, v, nil
 	}
 
 	if err := iter.Err(); err != nil {
-		return "", "", err
+		return nil, nil, err
 	}
 
-	return "", "", UnknownError
+	return nil, nil, errors.New("no previous key")
 }
 
-// loadReader loads a specific reader from the database using the given key
+// LoadReader loads a specific reader from the database using the given key
 func (r *RocksDB) LoadReader(id etf.ErlTerm) (etf.ErlTerm, error) {
 	idb, err := etf.EncodeErlTerm(id, true)
 	if err != nil {
 		return nil, err
 	}
-	value, err := r.db.Get(r.ro, idb)
+	value, err := r.db.GetBytes(r.ro, idb)
 	if err != nil {
-		return "", err
-	}
-	defer value.Free()
-
-	if value.Size() == 0 {
-		return "", nil
+		return nil, err
 	}
 
-	v, err := etf.DecodeErlTerm(value.Data())
+	if value == nil {
+		return nil, errors.New("key not found")
+	}
+
+	v, err := etf.DecodeErlTerm(value)
 	if err != nil {
 		return nil, err
 	}
 	return v, nil
 }
 
-// saveReader saves a reader to the database with the specified key and value
+// SaveReader saves a reader to the database with the specified key and value
 func (r *RocksDB) SaveReader(id etf.ErlTerm, data etf.ErlTerm) error {
 	idb, err := etf.EncodeErlTerm(id, true)
 	if err != nil {
@@ -260,7 +327,7 @@ func (r *RocksDB) SaveReader(id etf.ErlTerm, data etf.ErlTerm) error {
 	return r.db.Put(r.wo, idb, dataErl)
 }
 
-// remove deletes a record from the database using the given key
+// Remove deletes a record from the database using the given key
 func (r *RocksDB) Remove(key etf.ErlTerm) error {
 	keyb, err := etf.EncodeErlTerm(key, true)
 	if err != nil {
@@ -269,20 +336,19 @@ func (r *RocksDB) Remove(key etf.ErlTerm) error {
 	return r.db.Delete(r.wo, keyb)
 }
 
-// append adds a record to the database if it doesn't already exist, otherwise returns the existing key
+// Append adds a record to the database if it doesn't already exist, otherwise returns the existing key
 func (r *RocksDB) Append(rec etf.ErlTerm, feed etf.ErlTerm) (etf.ErlTerm, error) {
 	recb, err := etf.EncodeErlTerm(rec, true)
 	if err != nil {
 		return nil, err
 	}
-	existingValue, err := r.db.Get(r.ro, recb)
+	existingValue, err := r.db.GetBytes(r.ro, recb)
 	if err != nil {
 		return nil, err
 	}
-	defer existingValue.Free()
 
-	if existingValue.Size() > 0 {
-		// Record already exists, return existing ID
+	if existingValue != nil {
+		// Record already exists, return existing record
 		return rec, nil
 	}
 

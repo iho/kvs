@@ -3,6 +3,6 @@ module github.com/iho/kvs
 go 1.22.3
 
 require (
-	github.com/iho/etf v0.0.0-20240917060453-f61fa5b028d8 // indirect
-	github.com/linxGnu/grocksdb v1.9.3 // indirect
+	github.com/iho/etf v0.0.0-20240917060453-f61fa5b028d8
+	github.com/linxGnu/grocksdb v1.9.3
 )
